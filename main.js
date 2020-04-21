@@ -1,9 +1,4 @@
 
-
-function choice(fromArray) {
-  return fromArray[Math.floor(Math.random() * fromArray.length)];
-}
-
 function randomInteger(lowerInclusiveBound, upperExclusiveBound) {
   if (upperExclusiveBound === undefined) {
     upperExclusiveBound = lowerInclusiveBound;
@@ -12,11 +7,15 @@ function randomInteger(lowerInclusiveBound, upperExclusiveBound) {
   return lowerInclusiveBound + Math.floor(Math.random() * (upperExclusiveBound - lowerInclusiveBound));
 }
 
+function choice(fromArray) {
+  return fromArray[randomInteger(fromArray.length)];
+}
+
 function randomCoordinate(fieldWidth, fieldHeight) {
   return [randomInteger(fieldWidth), randomInteger(fieldHeight)];
 }
 
-function adjacentCoordinates([x, y], fieldWidth, fieldHeight, exclude) {
+function adjacentCoordinates([x, y], fieldWidth, fieldHeight, exclude = []) {
   return [
     [x+1, y],
     [x-1, y],
@@ -61,11 +60,12 @@ class Game extends Array {
   }
   generatePath(length) {
     if (length === undefined) {
-      length = Math.floor(Math.random() * 8 + 10);  // [10..18)
+      length = randomInteger(10, 18);
     }
     if (length > this.w*this.h*0.8) {
       throw new Error(`path length (${length}) too long for this field: ${this.w}x${this.h}`);
     }
+
     let path = [];
     let triesCount = 0;
     while (path.length < length) {
@@ -87,19 +87,19 @@ class Game extends Array {
         path.push(coordinate);
       };
     }
-    // console.log(path);
+    // console.log('path generated in %s tries', triesCount);
+
+    // do we need whole this model as array?
     path.forEach(([x, y], i) => {
       this[x+y*this.w] = i+1;
     });
 
     this.path = path.map(([x, y]) => x+y*this.w);
 
-    console.log('path generated in %s tries', triesCount);
-
     return this;
   }
   enterPosition(pos) {
-    if (pos === this.prevPos || this.completed) {
+    if (pos === this.prevPos || this.pathPos === this.path.length-1) {
       // probably mousemove triggered twice on same cell
       return;
     }
@@ -159,9 +159,6 @@ const EventListeners = {
     }
   },
   onCellMouseMove: (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-
     const pos = +e.target.dataset.pos;
     const res = game.enterPosition(pos);
 
