@@ -1,0 +1,51 @@
+
+:root {
+  --game-container-size: 75vw;
+}
+
+@media screen and (orientation: landscape) {
+  :root {
+    --game-container-size: 75vh;
+  }
+}
+
+body, html {
+  height: 100%;
+  margin: 0;
+}
+
+#app {
+  position: relative;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: lightyellow;
+  /*filter: invert(100%);*/
+  transition: background-color 0.5s ease;
+}
+
+
+#game-field {
+  height: var(--game-container-size);
+  width: var(--game-container-size);
+  background-color: lightblue;
+  display: grid;
+  grid-auto-rows: 1fr;
+  grid-template-columns: repeat(4, 1fr);
+  padding: 10px;
+  border: 3px solid darkblue;
+}
+
+.cell {
+  border-radius: 10px;
+  border: 2px solid;
+  margin: 3px;
+  background-color: white;
+  padding: 0;
+  color: blue;
+}
+
+.cell:hover {
+  color: yellow;
+}
