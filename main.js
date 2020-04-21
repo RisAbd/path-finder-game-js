@@ -45,10 +45,23 @@ class Game extends Array {
     this.fill(0);
 
     this.path = [];
+    this.prevPos = null;
+    this.pathPos = -1;
+    this.completed = false;
+  }
+  toString() {
+    let s = [];
+    for (let y = 0; y < this.h; y++) {
+      for (let x = 0; x < this.w; x++) {
+        s.push((this[y*this.w+x]+' ').padStart(3, ' '));
+      }
+      s.push('\n');
+    }
+    return s.join('');
   }
   generatePath(length) {
     if (length === undefined) {
-      length = Math.floor(Math.random() * 5 + 7);  // [7..12)
+      length = Math.floor(Math.random() * 8 + 10);  // [10..18)
     }
     if (length > this.w*this.h*0.8) {
       throw new Error(`path length (${length}) too long for this field: ${this.w}x${this.h}`);
@@ -79,22 +92,52 @@ class Game extends Array {
       this[x+y*this.w] = i+1;
     });
 
-    this.path = path;
+    this.path = path.map(([x, y]) => x+y*this.w);
 
     console.log('path generated in %s tries', triesCount);
 
     return this;
   }
-  toString() {
-    let s = [];
-    for (let y = 0; y < this.h; y++) {
-      for (let x = 0; x < this.w; x++) {
-        s.push((this[y*this.w+x]+' ').padStart(3, ' '));
-      }
-      s.push('\n');
+  enterPosition(pos) {
+    if (pos === this.prevPos || this.completed) {
+      // probably mousemove triggered twice on same cell
+      return;
     }
-    return s.join('');
+    // const prevPos = this.prevPos;
+    this.prevPos = pos;
+    
+    if (this.path[this.pathPos+1] === pos) {
+      this.pathPos++;
+
+      switch (this.pathPos) {
+        case 0: 
+          return 'path-start';
+        case this.path.length-1: 
+          this.completed = true;
+          return 'path-complete';
+        default: 
+          return 'path-continue';
+      }
+    } else {
+      this.pathPos = -1;
+      return 'path-fail';
+    }
   }
+  completeness() {
+    return this.pathPos / (this.path.length-1);
+  }
+}
+
+Game.randomSized = function (lower, upper) {
+  if (lower === undefined) {
+    lower = 5;
+    upper = 9;
+  } else if (upper === undefined) {
+    lower = lower - 1;
+    upper = lower + 3;
+  }
+  const s = randomInteger(lower, upper);
+  return new Game(s, s);
 }
 
 const DOM = {
@@ -102,17 +145,46 @@ const DOM = {
   gameField: document.querySelector('#game-field'),
 };
 
-const game = new Game(6, 6).generatePath();
-DOM.gameField.style.gridTemplateColumns = `repeat(${6}, 1fr)`;
 
+const game = Game.randomSized().generatePath();
+DOM.gameField.style.gridTemplateColumns = `repeat(${game.w}, 1fr)`;
 
 
 const EventListeners = {
   onCellClick: (e) => {
     console.log('click', e.target);
+    if (game.completed) {
+      // restart game
+      window.location.reload(false);
+    }
   },
   onCellMouseMove: (e) => {
-    // console.log('mousemove', e.target.dataset.pos);
+    e.preventDefault();
+    e.stopPropagation();
+
+    const pos = +e.target.dataset.pos;
+    const res = game.enterPosition(pos);
+
+    if (res === undefined) {
+      return;
+    }
+
+    DOM.applyCompleteness();
+
+    if (res === 'path-start') {
+      DOM.resetCells();
+    }
+    if (res === 'path-fail') {
+      DOM.resetCells();
+      return;
+    }
+
+    if (['path-start', 'path-continue'].includes(res)) {
+      DOM.setCellOnPath(pos);
+    } else if (res === 'path-complete') {
+      DOM.setCellOnPath(pos);
+      DOM.setCellsPathCompleted();
+    }
   },
 };
 
@@ -124,9 +196,30 @@ DOM.cells = game.map((_, i) => {
   cell.dataset.pos = i;
   cell.addEventListener('click', EventListeners.onCellClick);
   cell.addEventListener('mousemove', EventListeners.onCellMouseMove);
+  cell.addEventListener('touchmove', EventListeners.onCellMouseMove);
 
   DOM.gameField.appendChild(cell);  
 
   return cell;
 });
 
+
+Object.assign(DOM, {
+  resetCells: function () {
+    this.cells.forEach(c => { c.dataset.onPath = false; });
+  },
+  setCellOnPath: function (pos) {
+    this.cells[pos].dataset.onPath = true;
+  },
+  setCellsPathCompleted: function () {
+    this.gameField.classList.add('path-completed');
+  },
+  applyCompleteness: function () {
+    const completeness = game.completeness();
+    if (completeness !== 1) {
+      this.rootContainer.style.backgroundColor = `rgb(${0x44}, ${0x44 + completeness*0x66}, ${0x44})`;
+    } else {
+      this.rootContainer.style.backgroundColor = '#0000cc';
+    }
+  }
+});
