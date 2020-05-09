@@ -74,7 +74,7 @@ body, html {
   width: 100%;
   height: 100%;
   box-sizing: border-box;
-  font-size: 2rem;
+  font-size: 1.5rem;
   font-weight: bold;
   color: white;
   display: flex;
@@ -90,6 +90,10 @@ body, html {
 .path-cell[data-path-completed="true"] {
   border: 3px solid #ef00b3;
   /*color: cyan;*/
+}
+
+.path-cell.arrow {
+  font-size: 14px;
 }
 
 .path-cell.arrow-right {

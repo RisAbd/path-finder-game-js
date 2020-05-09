@@ -73,15 +73,16 @@ class Game extends Array {
     }
     return s.join('');
   }
-  generatePaths(length) {
+  generatePaths(count, length) {
+    if (count === undefined) {
+      count = randomInteger(1, 4);
+    }
     if (length === undefined) {
       length = randomInteger(8, 15);
     }
-    assert(length < this.w*this.h*0.75, `path length (${length}) too long for this field: ${this.w}x${this.h}`);
+    assert(length < this.w*this.h*0.6, `path length (${length}) too long for this field: ${this.w}x${this.h}`);
 
-    const pathsCount = 2;
-
-    this.paths = new Array(2).fill(0);
+    this.paths = new Array(count).fill(0);
 
     this.paths.forEach((_, pathIndex, arr) => {
 
@@ -206,7 +207,7 @@ const DOM = {
 };
 
 
-const game = Game.randomSized(5,6).generatePaths();
+const game = Game.randomSized().generatePaths();
 DOM.gameField.style.gridTemplateColumns = `repeat(${game.w}, 1fr)`;
 
 
@@ -280,9 +281,7 @@ DOM.cells = game.map((_, i) => {
 });
 
 
-
-const colors = ['purple', 'orange'];
-
+const colors = ['#ff0000', '#00ffff', '#00ff00', '#0000ff']
 
 Object.assign(DOM, {
 
@@ -296,7 +295,7 @@ Object.assign(DOM, {
   applyPath(path) {
     // todo:
     if (!path._color) {
-      path._color = randomColor(); //colors[path.id-1];
+      path._color = colors[(path.id-1)%4];
     }
 
     const completeness = path.completeness();
@@ -326,19 +325,19 @@ Object.assign(DOM, {
           // '←↑→↓'
           const posDiff = pos - path[i-1];
           if (posDiff === 1) {
-            pathCell.innerText = '→';
+            pathCell.innerText = '⇢';
             pathCell.classList.add('arrow-right');
             pathCell.classList.add('arrow');
           } else if (posDiff === -1) { 
-            pathCell.innerText = '←';
+            pathCell.innerText = '⇠';
             pathCell.classList.add('arrow-left');
             pathCell.classList.add('arrow');
           } else if (posDiff > 0) { 
-            pathCell.innerText = '↓';
+            pathCell.innerText = '⇣';
             pathCell.classList.add('arrow-down');
             pathCell.classList.add('arrow');
           } else if (posDiff < 0) { 
-            pathCell.innerText = '↑';
+            pathCell.innerText = '⇡';
             pathCell.classList.add('arrow-up');
             pathCell.classList.add('arrow');
           }
