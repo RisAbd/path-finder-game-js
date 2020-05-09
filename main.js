@@ -185,7 +185,7 @@ class Game extends Array {
     }
   }
   completeness() {
-    return this.paths.map(p => p.completeness()).reduce((a, b) => a > b ? a : b, 0);
+    return this.paths.map(p => p.completeness()).reduce((a, b) => a+b, 0) / this.paths.length;
   }
 }
 
@@ -231,6 +231,7 @@ const EventListeners = {
     }
 
     enterResult.forEach(DOM.applyPath.bind(DOM));
+    DOM.applyCompleteness(game);
   },
   onKeyDown: (e) => {
     const currentPos = document.activeElement && +document.activeElement.dataset.pos || 0;
@@ -298,13 +299,6 @@ Object.assign(DOM, {
       path._color = colors[(path.id-1)%4];
     }
 
-    const completeness = path.completeness();
-    if (completeness !== 1) {
-      this.rootContainer.style.backgroundColor = `rgb(${0x44}, ${0x44 + completeness*0x66}, ${0x44})`;
-    } else {
-      this.rootContainer.style.backgroundColor = '#0000cc';
-    }
-
     for (let i = 0; i < path.length; i++) {
       const pos = path[i];
       const cell = this.cells[pos];
@@ -342,10 +336,18 @@ Object.assign(DOM, {
             pathCell.classList.add('arrow');
           }
         }
-        pathCell.dataset.pathCompleted = completeness === 1;
+        pathCell.dataset.pathCompleted = path.completeness() === 1;
         cell.appendChild(pathCell);
       }
   
+    }
+  },
+  applyCompleteness(of) {
+    const completeness = of.completeness();
+    if (completeness !== 1) {
+      this.rootContainer.style.backgroundColor = `rgb(${0x44}, ${0x44 + completeness*0x66}, ${0x44})`;
+    } else {
+      this.rootContainer.style.backgroundColor = '#0000cc';
     }
   },
 });

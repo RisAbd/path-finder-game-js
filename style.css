@@ -88,7 +88,7 @@ body, html {
 }
 
 .path-cell[data-path-completed="true"] {
-  border: 3px solid #ef00b3;
+  border: 3px solid #0000ff;
   /*color: cyan;*/
 }
 
