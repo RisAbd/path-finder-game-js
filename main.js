@@ -1,4 +1,11 @@
 
+function assert(condition, message = 'Assertion Error') {
+  if (!condition) {
+    throw new Error(message);
+  }
+}
+
+
 function randomInteger(lowerInclusiveBound, upperExclusiveBound) {
   if (upperExclusiveBound === undefined) {
     upperExclusiveBound = lowerInclusiveBound;
@@ -28,6 +35,17 @@ function adjacentCoordinates([x, y], fieldWidth, fieldHeight, exclude = []) {
     });
 }
 
+function randomColor(opacity = false) {
+  const rnd = () => randomInteger(0, 256);
+  const r = `rgb(${rnd()}, ${rnd()}, ${rnd()})`;
+  if (opacity) {
+    opacity = opacity === true ? rnd() : opacity;
+    return r.replace('rgb', 'rgba').replace(')', `, ${opacity})`);
+  }
+  return r;
+}
+
+
 
 class Game extends Array {
   constructor(w, h) {
@@ -43,10 +61,7 @@ class Game extends Array {
     
     this.fill(0);
 
-    this.path = [];
-    this.prevPos = null;
-    this.pathPos = -1;
-    this.completed = false;
+    this.paths = [];
   }
   toString() {
     let s = [];
@@ -58,80 +73,125 @@ class Game extends Array {
     }
     return s.join('');
   }
-  generatePath(length) {
+  generatePaths(length) {
     if (length === undefined) {
-      length = randomInteger(10, 18);
+      length = randomInteger(8, 15);
     }
-    if (length > this.w*this.h*0.8) {
-      throw new Error(`path length (${length}) too long for this field: ${this.w}x${this.h}`);
-    }
+    assert(length < this.w*this.h*0.75, `path length (${length}) too long for this field: ${this.w}x${this.h}`);
 
-    let path = [];
-    let triesCount = 0;
-    while (path.length < length) {
-      triesCount += 1;
+    const pathsCount = 2;
 
-      // select first random position on field
-      let coordinate = randomCoordinate(this.w, this.h);
-      path.splice(0, path.length, coordinate);
+    this.paths = new Array(2).fill(0);
 
-      for (let i = 1; i < length; i++) {
-        // neighbors of last position excluding all that are already part of path
-        const neighbors = adjacentCoordinates(coordinate, this.w, this.h, path);
+    this.paths.forEach((_, pathIndex, arr) => {
 
-        if (neighbors.length === 0) {
-          // dead end, no free neighbors left, start again
-          break
+      // all previous paths coordinates are untouchable
+      const prevPathCoords = arr.slice(0, pathIndex).reduce((a, b) => a.concat(b), []);
+      // console.log(prevPathCoords);
+
+      // only first cells of previous path coordinates are untouchable
+      const prevPathHeadCoords = arr.slice(0, pathIndex).reduce((a, b) => {a.push(b[0]); return a;}, []);
+
+      let path = Object.assign([], {
+        pos: -1, 
+        _generateTriesCount: 0, 
+        id: pathIndex+1, 
+        triesCount: 0, 
+        completed: false,
+        completeness: function () {
+          return this.pos / (this.length - 1);
         }
-        coordinate = choice(neighbors);
-        path.push(coordinate);
-      };
-    }
-    // console.log('path generated in %s tries', triesCount);
+      });
+      // path can find its deadend so we need to loop until successful path is generated
+      while (path.length < length) {
+        path._generateTriesCount += 1;
 
-    // do we need whole this model as array?
-    path.forEach(([x, y], i) => {
-      this[x+y*this.w] = i+1;
+        // select first random position on field
+        let coordinate;
+        do {
+          coordinate = randomCoordinate(this.w, this.h);
+          // that does not clash with other's coordinates
+        } while (prevPathCoords.some(([x2, y2]) => coordinate[0] === x2 && coordinate[1] === y2));
+
+        // clear path and add first coordinate
+        path.splice(0, path.length, coordinate);
+
+        for (let i = 1; i < length; i++) {
+          const excludeCoords = path.concat(prevPathHeadCoords);
+          // neighbors of last position excluding all that are already part of path
+          const neighbors = adjacentCoordinates(coordinate, this.w, this.h, excludeCoords);
+
+          if (neighbors.length === 0) {
+            // dead end, no free neighbors left, start again
+            break
+          }
+          coordinate = choice(neighbors);
+          path.push(coordinate);
+        };
+      }
+      // console.log('path generated in %s tries', path._generateTriesCount);
+
+      arr[pathIndex] = path;
     });
 
-    this.path = path.map(([x, y]) => x+y*this.w);
+    this.paths.forEach(path => {
+      // do we need whole this model as array?
+      path.forEach(([x, y], i) => { 
+        const fp = x+y*this.w;
+        path[i] = fp; 
+        this[fp] = i+1; 
+      });
+    });
 
     return this;
   }
   enterPosition(pos) {
-    if (pos === this.prevPos || this.pathPos === this.path.length-1) {
-      // probably mousemove triggered twice on same cell
+    if (pos === this.prevPos || this.completed) {
       return;
     }
-    // const prevPos = this.prevPos;
     this.prevPos = pos;
-    
-    if (this.path[this.pathPos+1] === pos) {
-      this.pathPos++;
 
-      switch (this.pathPos) {
-        case 0: 
-          return 'path-start';
-        case this.path.length-1: 
-          this.completed = true;
-          return 'path-complete';
-        default: 
-          return 'path-continue';
+    const onGoingPaths = this.paths.map(path => {
+      if (path.completed) {
+        return [path, undefined];
       }
-    } else {
-      this.pathPos = -1;
-      return 'path-fail';
+      if (path[path.pos+1] === pos) {
+        path.pos += 1;
+
+        switch (path.pos) {
+          case 0: 
+            return [path, 'path-start'];
+          case path.length-1: 
+            path.completed = true;
+            return [path, 'path-complete'];
+          default: 
+            return [path, 'path-continue'];
+        }
+      } else if (path.pos > -1) {
+        path.pos = -1;
+        path.triesCount += 1;
+        return [path, 'path-fail'];
+      } else {
+        return [path, undefined]
+      }
+    }).filter(([p, res]) => res !== undefined);
+
+    // todo: rework! 
+    // assert([1, 0].includes(onGoingPaths.length), 'something went wrong!');
+
+    if (onGoingPaths.length > 0) {
+      return onGoingPaths.map(([p, r]) => p); 
     }
   }
   completeness() {
-    return this.pathPos / (this.path.length-1);
+    return this.paths.map(p => p.completeness()).reduce((a, b) => a > b ? a : b, 0);
   }
 }
 
 Game.randomSized = function (lower, upper) {
   if (lower === undefined) {
-    lower = 5;
-    upper = 9;
+    lower = 6;
+    upper = 10;
   } else if (upper === undefined) {
     lower = lower - 1;
     upper = lower + 3;
@@ -146,54 +206,73 @@ const DOM = {
 };
 
 
-const game = Game.randomSized().generatePath();
+const game = Game.randomSized(5,6).generatePaths();
 DOM.gameField.style.gridTemplateColumns = `repeat(${game.w}, 1fr)`;
 
 
 const EventListeners = {
   onCellClick: (e) => {
     console.log('click', e.target);
-    if (game.completed) {
-      // restart game
-      window.location.reload(false);
-    }
+    // if (game.completeness() === 1) {
+    //   // restart game
+    //   window.location.reload(false);
+    // }
   },
   onCellMouseMove: (e) => {
+    e.target.focus();
+  },
+  onCellFocus: (e) => {
     const pos = +e.target.dataset.pos;
-    const res = game.enterPosition(pos);
+    const enterResult = game.enterPosition(pos);
 
-    if (res === undefined) {
+    if (enterResult === undefined) {
       return;
     }
 
-    DOM.applyCompleteness();
-
-    if (res === 'path-start') {
-      DOM.resetCells();
+    enterResult.forEach(DOM.applyPath.bind(DOM));
+  },
+  onKeyDown: (e) => {
+    const currentPos = document.activeElement && +document.activeElement.dataset.pos || 0;
+    let targetPos = currentPos;
+    switch (e.keyCode) {
+      case 38: // up
+        if (currentPos >= game.w) {
+          targetPos -= game.w;
+        }
+        break;
+      case 39: // right
+        if (currentPos % game.w < game.w-1) {
+          targetPos += 1;
+        }
+        break;
+      case 40: // down
+        if (currentPos < game.length - game.w) {
+          targetPos += game.w;
+        }
+        break;
+      case 37: // left
+        if (currentPos % game.w > 0) {
+          targetPos += -1;
+        }
+        break;
     }
-    if (res === 'path-fail') {
-      DOM.resetCells();
-      return;
-    }
-
-    if (['path-start', 'path-continue'].includes(res)) {
-      DOM.setCellOnPath(pos);
-    } else if (res === 'path-complete') {
-      DOM.setCellOnPath(pos);
-      DOM.setCellsPathCompleted();
+    if (targetPos !== currentPos) {
+      DOM.cells[targetPos].focus();
     }
   },
 };
 
+document.addEventListener('keydown', EventListeners.onKeyDown);
+
 
 DOM.cells = game.map((_, i) => {
-  const value = game[i];
-  const cell = document.createElement('button');
+  const cell = document.createElement('div');
+  cell.tabIndex = 0;
   cell.classList.add('cell');
   cell.dataset.pos = i;
+  cell.addEventListener('focus', EventListeners.onCellFocus);
   cell.addEventListener('click', EventListeners.onCellClick);
   cell.addEventListener('mousemove', EventListeners.onCellMouseMove);
-  cell.addEventListener('touchmove', EventListeners.onCellMouseMove);
 
   DOM.gameField.appendChild(cell);  
 
@@ -201,22 +280,73 @@ DOM.cells = game.map((_, i) => {
 });
 
 
+
+const colors = ['purple', 'orange'];
+
+
 Object.assign(DOM, {
-  resetCells: function () {
-    this.cells.forEach(c => { c.dataset.onPath = false; });
+
+  _createPathCell(path) {
+    const el = document.createElement('div');
+    el.classList.add('path-cell');
+    el.dataset.pathId = path.id;
+    el.style.backgroundColor = path._color;
+    return el;
   },
-  setCellOnPath: function (pos) {
-    this.cells[pos].dataset.onPath = true;
-  },
-  setCellsPathCompleted: function () {
-    this.gameField.classList.add('path-completed');
-  },
-  applyCompleteness: function () {
-    const completeness = game.completeness();
+  applyPath(path) {
+    // todo:
+    if (!path._color) {
+      path._color = randomColor(); //colors[path.id-1];
+    }
+
+    const completeness = path.completeness();
     if (completeness !== 1) {
       this.rootContainer.style.backgroundColor = `rgb(${0x44}, ${0x44 + completeness*0x66}, ${0x44})`;
     } else {
       this.rootContainer.style.backgroundColor = '#0000cc';
     }
-  }
+
+    for (let i = 0; i < path.length; i++) {
+      const pos = path[i];
+      const cell = this.cells[pos];
+      // if (i === 0) {
+      //   // todo: remove on 'path-fail'
+      //   cell.innerText = path.triesCount;
+      // }
+      if (i > path.pos) {
+        cell.querySelectorAll(`.path-cell[data-path-id="${path.id}"]`).forEach(e => e.remove());
+      } else {
+        // todo: maybe .path-cell is already exists?
+        const pathCell = cell.querySelector(`.path-cell[data-path-id="${path.id}"]`) || this._createPathCell(path);
+        if (i === 0) {
+          pathCell.innerText = path.triesCount;
+        } else {
+          // '⇠⇡⇢⇣'
+          // '⬅⬆➡⬇'
+          // '←↑→↓'
+          const posDiff = pos - path[i-1];
+          if (posDiff === 1) {
+            pathCell.innerText = '→';
+            pathCell.classList.add('arrow-right');
+            pathCell.classList.add('arrow');
+          } else if (posDiff === -1) { 
+            pathCell.innerText = '←';
+            pathCell.classList.add('arrow-left');
+            pathCell.classList.add('arrow');
+          } else if (posDiff > 0) { 
+            pathCell.innerText = '↓';
+            pathCell.classList.add('arrow-down');
+            pathCell.classList.add('arrow');
+          } else if (posDiff < 0) { 
+            pathCell.innerText = '↑';
+            pathCell.classList.add('arrow-up');
+            pathCell.classList.add('arrow');
+          }
+        }
+        pathCell.dataset.pathCompleted = completeness === 1;
+        cell.appendChild(pathCell);
+      }
+  
+    }
+  },
 });
